@@ -10,7 +10,6 @@
 #import "UIImageView+Utils.h"
 
 @interface ViewController (){
-    IBOutlet UIImageView *temptumb,*fullview;
     
 }
 
