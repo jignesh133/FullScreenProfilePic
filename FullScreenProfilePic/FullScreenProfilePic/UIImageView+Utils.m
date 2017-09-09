@@ -8,6 +8,9 @@
 
 #import "UIImageView+Utils.h"
 #import <objc/runtime.h>
+#define MINIMUM_SCALE 0.5
+#define MAXIMUM_SCALE 6.0
+
 
 @implementation UIImageView (Utils)
 
@@ -36,16 +39,35 @@
 -(void)setFullimageview:(UIImageView *)fullimageview{
     objc_setAssociatedObject(self, @selector(fullimageview), fullimageview, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
-
+-(UIScrollView *)scrlView{
+    return objc_getAssociatedObject (self, @selector(scrlView));
+}
+-(void)setScrlView:(UIScrollView *)scrlView{
+    objc_setAssociatedObject(self, @selector(scrlView), scrlView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+-(NSNumber *)xPos{
+    return objc_getAssociatedObject (self, @selector(xPos));
+}
+-(NSNumber *)yPos{
+    return objc_getAssociatedObject (self, @selector(yPos));
+}
+-(void)setXPos:(NSNumber *)xPos{
+    objc_setAssociatedObject(self, @selector(xPos), xPos, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+-(void)setYPos:(NSNumber *)yPos{
+    objc_setAssociatedObject(self, @selector(yPos), yPos, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
 // SET PHOTO VIEWER
 -(void)methodPhotoViewerWithSuperView:(UIView *)view{
-    
     if (self.image == nil){
         return;
     }
-    
+    CGRect screenRect = [[UIScreen mainScreen] bounds];
+
     self.temptumb = self;
     self.view = view;
+    
+    self.view.frame = CGRectMake(0, 0, screenRect.size.width, screenRect.size.height);
     
     // MAKE ON USER INTERCATINO ON
     [self.temptumb setUserInteractionEnabled:YES];
@@ -57,9 +79,15 @@
     [self.temptumb addGestureRecognizer:gesture];
     
 }
+
 - (void)bannerTapped:(UIGestureRecognizer *)gestureRecognizer {
     NSLog(@"%@", [gestureRecognizer view]);
     CGRect screenRect = [[UIScreen mainScreen] bounds];
+    CGPoint tapPoint = [gestureRecognizer locationInView:self.view];
+    
+    self.xPos = [NSNumber numberWithFloat:tapPoint.x];
+    self.yPos = [NSNumber numberWithFloat:tapPoint.y];
+    
     //create new image
     self.temptumb=(UIImageView *)gestureRecognizer.view;
     //self.fullimageview is gloabal, So we can acess any time to remove it
@@ -67,8 +95,18 @@
     [self.fullimageview setContentMode:UIViewContentModeScaleAspectFit];
     
     self.fullimageview.image = [(UIImageView *)gestureRecognizer.view image];
-    CGRect point=[self convertRect:gestureRecognizer.view.frame fromView:gestureRecognizer.view];
-    [self.fullimageview setFrame:point];
+    
+    // ADD PIN GESTURE
+    UIPinchGestureRecognizer *pgr = [[UIPinchGestureRecognizer alloc]initWithTarget:self action:@selector(handlePinchGesture:)];
+    pgr.delegate = self;
+    [self.fullimageview addGestureRecognizer:pgr];
+    
+    // ADD SCRLVIEW DELEGATE
+    self.scrlView = [[UIScrollView alloc] initWithFrame:self.view.frame];
+    self.scrlView.minimumZoomScale = MINIMUM_SCALE;
+    self.scrlView.maximumZoomScale = MAXIMUM_SCALE;
+    self.scrlView.contentSize = self.fullimageview.frame.size;
+    self.scrlView.delegate = self;
     
     // ADD TRANSPARANT BG
     self.viewbg = [[UIView alloc] initWithFrame:self.view.frame];
@@ -76,10 +114,15 @@
     self.viewbg.alpha = 0.6;
     
     [self.view addSubview:self.viewbg];
+    [self.scrlView addSubview:self.fullimageview];
     
-    [self.view addSubview:self.fullimageview];
+    [self.view addSubview:self.scrlView];
+
+    CGRect originalpoint=[self.view convertRect:self.bounds fromView:self];
+    [self.fullimageview setFrame:originalpoint];
     [UIView animateWithDuration:0.5
                      animations:^{
+                         
                          [self.fullimageview setFrame:CGRectMake(0,
                                                                  0,
                                                                  screenRect.size.width,
@@ -94,16 +137,45 @@
 }
 -(void)fullimagetapped:(UIGestureRecognizer *)gestureRecognizer {
     CGRect point=[self convertRect:self.temptumb.frame fromView:self.temptumb];
+    CGRect originalpoint=[self.view convertRect:self.bounds fromView:self];
+
+    
     gestureRecognizer.view.backgroundColor=[UIColor clearColor];
     [UIView animateWithDuration:0.5
                      animations:^{
-                         [(UIImageView *)gestureRecognizer.view setFrame:point];
+                         [(UIImageView *)gestureRecognizer.view setFrame:originalpoint];
                      }];
-    [self performSelector:@selector(animationDone:) withObject:[gestureRecognizer view] afterDelay:0.4];
+   [self performSelector:@selector(animationDone:) withObject:[gestureRecognizer view] afterDelay:0.4];
 }
-//Remove view after animation of remove
+
+-(void)handlePinchGesture:(UIPinchGestureRecognizer*)recognizer{
+    if ([recognizer scale]<MINIMUM_SCALE) {
+        NSLog(@"======== %f Scale Applied ===========",[recognizer scale]);
+        CGAffineTransform transform = CGAffineTransformMakeScale(MINIMUM_SCALE,MINIMUM_SCALE);
+        self.fullimageview.transform = transform;
+    }
+   else if ([recognizer scale]>MAXIMUM_SCALE) {
+        NSLog(@"======== %f Scale Applied ===========",[recognizer scale]);
+        CGAffineTransform transform = CGAffineTransformMakeScale(MAXIMUM_SCALE, MAXIMUM_SCALE);
+        self.fullimageview.transform = transform;
+   }else{
+       NSLog(@"======== %f Scale Applied ===========",[recognizer scale]);
+       CGAffineTransform transform = CGAffineTransformMakeScale([recognizer scale], [recognizer scale]);
+       self.fullimageview.transform = transform;
+
+   }
+}
+- (UIView *)viewForZoomingInScrollView:(UIScrollView *)scrollView
+{
+    return self.fullimageview;
+}
+- (void)scrollViewDidEndZooming:(UIScrollView *)scrollView withView:(UIView *)view atScale:(CGFloat)scale
+{
+    
+}
 -(void)animationDone:(UIView  *)view
 {
+    [self.scrlView removeFromSuperview];
     [self.viewbg removeFromSuperview];
     [self.fullimageview removeFromSuperview];
 }
